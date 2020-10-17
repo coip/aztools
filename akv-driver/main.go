@@ -7,7 +7,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/coip/aztools/akv"
@@ -29,19 +29,17 @@ func main() {
 
 	var (
 		v = akv.NewVault(vaultName)
-
-		secret *string
-		err    error
 	)
 
 	if secretName == "" {
-		log.Fatal(secretenv + " not set.\n")
+		fmt.Println("ERROR: " + secretenv + " not set.")
+		os.Exit(1)
 	}
 
 	if secret, err := v.GetSecret(secretName); err != nil {
 		panic(err)
 	} else {
-		log.Print(*secret)
+		fmt.Print(*secret)
 	}
 
 }

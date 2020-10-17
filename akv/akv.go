@@ -19,22 +19,41 @@ package akv
 import (
 	"context"
 	"fmt"
-	"os"
 	"path"
 
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/keyvault/keyvault"
+	kvauth "github.com/Azure/azure-sdk-for-go/services/keyvault/auth"
+	"github.com/Azure/go-autorest/autorest"
 
 	_ "github.com/joho/godotenv/autoload"
 )
 
-type Vault string
+type Vault struct {
+	Name string
 
-func (v Vault) String() string {
-	return string(v)
+	client keyvault.BaseClient
 }
 
-func NewVault(vaultname string) Vault {
-	return Vault(vaultname)
+func (v Vault) String() string {
+	return v.Name
+}
+
+func NewVault(vaultname string) *Vault {
+	var (
+		authorizer autorest.Authorizer
+		err        error
+	)
+
+	if authorizer, err = kvauth.NewAuthorizerFromEnvironment(); err != nil {
+		panic(err)
+	}
+
+	var v = &Vault{Name: vaultname}
+
+	v.client = keyvault.New()
+	v.client.Authorizer = authorizer
+
+	return v
 }
 
 const vaultURLfmt = "https://%s.vault.azure.net"
@@ -43,11 +62,14 @@ func (v Vault) URL() string {
 	return fmt.Sprintf(vaultURLfmt, v)
 }
 
-func (v Vault) ListSecrets(basicClient keyvault.BaseClient) {
-	secretList, err := basicClient.GetSecrets(context.Background(), v.URL(), nil)
-	if err != nil {
-		fmt.Printf("unable to get list of secrets: %v\n", err)
-		os.Exit(1)
+func (v Vault) ListSecrets() error {
+	var (
+		secretList keyvault.SecretListResultPage
+		err        error
+	)
+
+	if secretList, err = v.client.GetSecrets(context.Background(), v.URL(), nil); err != nil {
+		return fmt.Errorf("unable to get list of secrets: %v\n", err)
 	}
 
 	// group by ContentType
@@ -77,30 +99,42 @@ func (v Vault) ListSecrets(basicClient keyvault.BaseClient) {
 	for _, wov := range secWithoutType {
 		fmt.Println(wov)
 	}
+
+	return nil
+
 }
 
-func (v Vault) GetSecret(basicClient keyvault.BaseClient, secname string) (*string, error) {
-	secretResp, err := basicClient.GetSecret(context.Background(), v.URL(), secname, "")
-	if err != nil {
+func (v Vault) GetSecret(secname string) (*string, error) {
+	var (
+		secret keyvault.SecretBundle
+
+		err error
+	)
+
+	if secret, err = v.client.GetSecret(context.Background(), v.URL(), secname, ""); err != nil {
 		return nil, fmt.Errorf("unable to get value for secret: %v\n", err)
 	}
-	return secretResp.Value, nil
+
+	return secret.Value, nil
+
 }
 
 //CreateUpdateSecret will create or update a secret, and return the ID. on error, ID will be nil
-func (v Vault) CreateUpdateSecret(basicClient keyvault.BaseClient, secname, secvalue string) (*string, error) {
-	var secParams keyvault.SecretSetParameters
-	secParams.Value = &secvalue
-	newBundle, err := basicClient.SetSecret(context.Background(), v.URL(), secname, secParams)
-	if err != nil {
+func (v Vault) CreateUpdateSecret(secname, secvalue string) (*string, error) {
+	var (
+		params = keyvault.SecretSetParameters{Value: &secvalue}
+	)
+
+	if newBundle, err := v.client.SetSecret(context.Background(), v.URL(), secname, params); err != nil {
 		return nil, fmt.Errorf("unable to add/update secret: %v\n", err)
+	} else {
+		return newBundle.ID, nil
 	}
-	return newBundle.ID, nil
+
 }
 
-func (v Vault) DeleteSecret(basicClient keyvault.BaseClient, secname string) error {
-	_, err := basicClient.DeleteSecret(context.Background(), v.URL(), secname)
-	if err != nil {
+func (v Vault) DeleteSecret(secname string) error {
+	if _, err := v.client.DeleteSecret(context.Background(), v.URL(), secname); err != nil {
 		return fmt.Errorf("error deleting secret: %v\n", err)
 	}
 	return nil

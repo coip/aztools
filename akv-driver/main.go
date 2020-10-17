@@ -7,14 +7,10 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 
-	"github.com/Azure/azure-sdk-for-go/profiles/latest/keyvault/keyvault"
-	kvauth "github.com/Azure/azure-sdk-for-go/services/keyvault/auth"
 	"github.com/coip/aztools/akv"
-
-	_ "github.com/joho/godotenv/autoload"
 )
 
 const (
@@ -22,7 +18,7 @@ const (
 	secretenv = "KVAULT_SECRET_NAME"
 )
 
-// NewAuthorizerFromEnvironment @ L30 depends on some env as well: https://github.com/Azure/azure-sdk-for-go#more-authentication-details
+// NewAuthorizerFromEnvironment depends on some env as well: https://github.com/Azure/azure-sdk-for-go#more-authentication-details
 
 var (
 	vaultName  = os.Getenv(vaultenv)
@@ -31,31 +27,21 @@ var (
 
 func main() {
 
-	v := akv.NewVault(vaultName)
-
-	authorizer, err := kvauth.NewAuthorizerFromEnvironment()
-	if err != nil {
-		fmt.Printf("unable to create vault authorizer: %v\n", err)
-		os.Exit(1)
-	}
-
-	basicClient := keyvault.New()
-	basicClient.Authorizer = authorizer
-
 	var (
+		v = akv.NewVault(vaultName)
+
 		secret *string
 		err    error
 	)
 
-	if secretName = "" {
-		fmt.Println(secretenv + " not set.\n")
+	if secretName == "" {
+		log.Fatal(secretenv + " not set.\n")
 	}
 
-
-	if secret, err = v.GetSecret(basicClient, secretName); err != nil {
+	if secret, err := v.GetSecret(secretName); err != nil {
 		panic(err)
+	} else {
+		log.Print(*secret)
 	}
-
-	fmt.Print(*secret)
 
 }
